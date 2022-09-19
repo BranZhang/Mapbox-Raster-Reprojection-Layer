@@ -1,5 +1,6 @@
 import './base.css';
 
+import CustomSource from "./custom_source.js";
 import WMTSCapabilities from 'ol/format/WMTSCapabilities';
 import center from '@turf/center';
 import {convertMapBounds, convertTargetBoundsToPolygon} from './coord_converter.js';
@@ -56,7 +57,7 @@ function createDebugLayer() {
         },
         'paint': {
             'line-color': '#f00',
-            'line-width': 2
+            'line-width': 0.5
         }
     });
 
@@ -82,10 +83,26 @@ function createDebugLayer() {
             'text-color': '#f00'
         }
     });
-    // 计算对角线中短一点的那条边，距离小于一定距离就不显示。
 
-    map.on('moveend', update);
-    update();
+    const customSource = new CustomSource({
+        wmtsUrl: 'https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS',
+        map,
+        debug: true
+    });
+
+    map.addSource('custom-source', customSource);
+
+    map.addLayer({
+        id: 'custom-source',
+        type: 'raster',
+        source: 'custom-source',
+        paint: {
+            'raster-opacity': 0.5
+        }
+    });
+
+    // map.on('moveend', update);
+    // update();
 }
 
 function update() {
@@ -134,8 +151,8 @@ function targetTiles(bounds, metersPerPixel) {
     const targetBounds = convertMapBounds(bounds);
 
     const tileLengthInMeters = currentMatrix.ScaleDenominator * 0.00028 * 256;
-    // targetBounds[0][0] -= tileLengthInMeters;
-    // targetBounds[0][1] += tileLengthInMeters;
+    targetBounds[0][0] -= tileLengthInMeters;
+    targetBounds[1][1] += tileLengthInMeters;
 
     const containedTiles = [];
 
