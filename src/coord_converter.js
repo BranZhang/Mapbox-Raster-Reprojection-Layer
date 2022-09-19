@@ -36,27 +36,41 @@ function convertMapBounds(mapBounds) {
     ]];
 }
 
-function convertTargetBoundsToPolygon(topLeft, tileLength) {
-    const southWest = converter.inverse([topLeft[0], topLeft[1] - tileLength]);
-    const southEast = converter.inverse([topLeft[0] + tileLength, topLeft[1] - tileLength]);
-    const northEast = converter.inverse([topLeft[0] + tileLength, topLeft[1]]);
-    const northWest = converter.inverse(topLeft);
+function convertTargetBoundsToPolygon(topLeft, tileLength, divide = 4) {
+    const southWest = [topLeft[0], topLeft[1] - tileLength];
+    const southEast = [topLeft[0] + tileLength, topLeft[1] - tileLength];
+    const northEast = [topLeft[0] + tileLength, topLeft[1]];
+    const northWest = topLeft;
+
+    const coordinates = [southWest];
+
+    coordinates.push(...interpolateLine(southWest, southEast, divide));
+    coordinates.push(...interpolateLine(southEast, northEast, divide));
+    coordinates.push(...interpolateLine(northEast, northWest, divide));
+    coordinates.push(...interpolateLine(northWest, southWest, divide));
 
     return {
         'type': 'Feature',
         'geometry': {
             'type': 'Polygon',
             coordinates: [
-                [
-                    southWest,
-                    southEast,
-                    northEast,
-                    northWest,
-                    southWest,
-                ]
+                coordinates.map(converter.inverse)
             ]
         }
     };
+}
+
+function interpolateLine(start, end, divide) {
+    const result = [];
+
+    for (let i = 1; i <= divide; i++) {
+        result.push([
+            start[0] + (end[0] - start[0]) * (i / divide),
+            start[1] + (end[1] - start[1]) * (i / divide)
+        ])
+    }
+
+    return result;
 }
 
 export {

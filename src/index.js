@@ -56,7 +56,7 @@ function createDebugLayer() {
         },
         'paint': {
             'line-color': '#f00',
-            'line-width': 4
+            'line-width': 2
         }
     });
 
@@ -73,7 +73,7 @@ function createDebugLayer() {
         'type': 'symbol',
         'source': 'triangle-center',
         'layout': {
-            'text-field': ['concat', ['get', 'x'], '-', ['get', 'y'], '-', ['get', 'z']],
+            'text-field': ['concat', 'x:', ['get', 'x'], '\n', 'y:', ['get', 'y'], '\n', 'z:', ['get', 'z']],
             'text-allow-overlap': true,
             'text-rotation-alignment': 'map',
             'text-size': 20
@@ -84,20 +84,22 @@ function createDebugLayer() {
     });
     // 计算对角线中短一点的那条边，距离小于一定距离就不显示。
 
-    map.on('moveend', () => {
-        // const targetTilesBounds = targetTiles(map.getBounds().toArray(), 1 / map.transform.pixelsPerMeter);
-        const targetTilesBounds = targetTiles(
-            map.getBounds().toArray(),
-            1 / map.transform.projection.pixelsPerMeter(0, map.transform.worldSize));
-        map.getSource('triangle').setData(targetTilesBounds);
+    map.on('moveend', update);
+    update();
+}
 
-        const targetTilesCenter = {
-            'type': 'FeatureCollection',
-            features: targetTilesBounds.features.map(f => center(f, {properties: f.properties}))
-        };
-        console.log(targetTilesBounds);
-        map.getSource('triangle-center').setData(targetTilesCenter);
-    });
+function update() {
+    // const targetTilesBounds = targetTiles(map.getBounds().toArray(), 1 / map.transform.pixelsPerMeter);
+    const targetTilesBounds = targetTiles(
+        map.getBounds().toArray(),
+        1 / map.transform.projection.pixelsPerMeter(0, map.transform.worldSize));
+    map.getSource('triangle').setData(targetTilesBounds);
+
+    const targetTilesCenter = {
+        'type': 'FeatureCollection',
+        features: targetTilesBounds.features.map(f => center(f, {properties: f.properties}))
+    };
+    map.getSource('triangle-center').setData(targetTilesCenter);
 }
 
 function targetTiles(bounds, metersPerPixel) {
@@ -123,15 +125,17 @@ function targetTiles(bounds, metersPerPixel) {
 
     if ((bounds[0][0] >= bounds[1][0]) || (bounds[0][1] >= bounds[1][1])) {
         console.log("超出屏幕外");
-        return;
+        return {
+            'type': 'FeatureCollection',
+            features: []
+        };
     }
 
     const targetBounds = convertMapBounds(bounds);
-    console.log('targetBounds', targetBounds);
 
     const tileLengthInMeters = currentMatrix.ScaleDenominator * 0.00028 * 256;
-    targetBounds[0][0] -= tileLengthInMeters;
-    targetBounds[0][1] += tileLengthInMeters;
+    // targetBounds[0][0] -= tileLengthInMeters;
+    // targetBounds[0][1] += tileLengthInMeters;
 
     const containedTiles = [];
 
@@ -142,7 +146,11 @@ function targetTiles(bounds, metersPerPixel) {
                 currentMatrix.TopLeftCorner[1] - tileLengthInMeters * j
             ];
 
-            if (bboxContains(targetBounds, tileTopLeft)) {
+            const tileTopRight = [tileTopLeft[0] + tileLengthInMeters, tileTopLeft[1]];
+            const tileBottomLeft = [tileTopLeft[0], tileTopLeft[1] - tileLengthInMeters];
+            const tileBottomRight = [tileTopLeft[0] + tileLengthInMeters, tileTopLeft[1] - tileLengthInMeters];
+
+            if (bboxContains(targetBounds, tileTopLeft) || bboxContains(targetBounds, tileTopRight) || bboxContains(targetBounds, tileBottomLeft) || bboxContains(targetBounds, tileBottomRight)) {
                 containedTiles.push({
                     x: i,
                     y: j,
@@ -152,8 +160,6 @@ function targetTiles(bounds, metersPerPixel) {
             }
         }
     }
-
-    console.log(containedTiles);
 
     return {
         'type': 'FeatureCollection',
