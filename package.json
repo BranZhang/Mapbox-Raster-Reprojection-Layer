@@ -19,7 +19,10 @@
     "webpack-dev-server": "^4.9.0"
   },
   "dependencies": {
+    "@turf/center": "^6.5.0",
     "dat.gui": "^0.7.9",
+    "ol": "7.1.0",
+    "proj4": "2.8.0",
     "twgl.js": "^4.24.0"
   }
 }
