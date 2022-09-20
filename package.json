@@ -12,11 +12,14 @@
   "license": "ISC",
   "devDependencies": {
     "css-loader": "^6.7.1",
+    "file-loader": "^6.2.0",
     "html-webpack-plugin": "^5.5.0",
     "style-loader": "^3.3.1",
     "webpack": "^5.72.1",
     "webpack-cli": "^4.9.2",
-    "webpack-dev-server": "^4.9.0"
+    "webpack-dev-server": "^4.9.0",
+    "image-webpack-loader": "^8.1.0",
+    "webpack-glsl-loader": "^1.0.1"
   },
   "dependencies": {
     "@turf/center": "^6.5.0",

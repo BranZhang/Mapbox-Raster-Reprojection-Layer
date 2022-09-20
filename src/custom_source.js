@@ -3,12 +3,13 @@ import SphericalMercator from "@mapbox/sphericalmercator";
 import {convertMapBounds, convertTargetBoundsToPolygon} from "./coord_converter";
 import center from "@turf/center";
 
+import {draw} from "./draw.js";
+
 const merc = new SphericalMercator();
 
 export default class CustomSource {
     constructor({wmtsUrl, map, debug}) {
         this.type = 'custom';
-        this.cache = new Map();
         this.tileSize = 256;
         // this._wmtsUrl = wmtsUrl;
         this._map = map;
@@ -43,9 +44,10 @@ export default class CustomSource {
                 mercatorTileBbox,
                 1 / this._map.transform.projection.pixelsPerMeter(
                     0,
-                    this._map.transform.tileSize * Math.pow(2, z)
+                    512 * Math.pow(2, z)
                 ));
 
+            console.log(targetTilesBounds);
             this._map.getSource('triangle').setData(targetTilesBounds);
 
             const targetTilesCenter = {
@@ -57,23 +59,13 @@ export default class CustomSource {
 
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = this.tileSize;
-        const context = canvas.getContext('2d', {willReadFrequently: true});
 
-        context.fillStyle = '#ffffff';
-        context.strokeRect(0, 0, this.tileSize, this.tileSize);
+        if (targetTilesBounds.features.length > 0) {
+            // draw(canvas.getContext("webgl"), targetTilesBounds.features);
+            await draw(canvas, targetTilesBounds.features, mercatorTileBbox);
 
-        context.lineWidth = 5;
-
-        targetTilesBounds.features.forEach(feature => {
-            context.beginPath();
-            const begin = this._lngLatToTileRelativeCoordinate(mercatorTileBbox, feature.geometry.coordinates[0][0]);
-            context.moveTo(begin[0], begin[1]);
-            for (let i = 1; i < feature.geometry.coordinates[0].length; i++) {
-                const position = this._lngLatToTileRelativeCoordinate(mercatorTileBbox, feature.geometry.coordinates[0][i]);
-                context.lineTo(position[0], position[1]);
-            }
-            context.stroke();
-        })
+            console.log("收到绘制结果");
+        }
 
         return canvas;
     }
@@ -150,7 +142,7 @@ export default class CustomSource {
         return {
             'type': 'FeatureCollection',
             features: containedTiles.map(t => {
-                const feature = convertTargetBoundsToPolygon(t.topLeft, tileLengthInMeters);
+                const feature = convertTargetBoundsToPolygon(t.topLeft, tileLengthInMeters, 1);
                 feature.properties = {
                     x: t.x,
                     y: t.y,
@@ -173,11 +165,4 @@ export default class CustomSource {
         return (point[0] >= bbox[0][0] && point[0] < bbox[1][0]) && (point[1] >= bbox[0][1] && point[1] < bbox[1][1]);
     }
 
-    _lngLatToTileRelativeCoordinate(bounds, lngLat) {
-        const x = (lngLat[0] - bounds[0][0]) / (bounds[1][0] - bounds[0][0]) * this.tileSize;
-        const y = this.tileSize - (lngLat[1] - bounds[0][1]) / (bounds[1][1] - bounds[0][1]) * this.tileSize;
-
-        console.log([x, y]);
-        return [x, y];
-    }
 }
