@@ -66,32 +66,17 @@ export default class DrawTile {
 
                     twgl.setUniforms(programInfo, uniforms);
 
-                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, 1);
-                    const coordinates = feature.geometry.coordinates[0].map(c => this._lngLatToTileRelativeCoordinate(mercBounds, c));
+                    const {position, uv} = this._buildPositionAndUV(topLeft, tileLengthInMeters, mercBounds);
 
                     // 传入缓冲数据
                     const arrays = {
                         a_position: {
                             numComponents: 2,
-                            data: [
-                                ...coordinates[3],
-                                ...coordinates[2],
-                                ...coordinates[0],
-                                ...coordinates[2],
-                                ...coordinates[0],
-                                ...coordinates[1]
-                            ],
+                            data: position,
                         },
                         a_uv: {
                             numComponents: 2,
-                            data: [
-                                0.0, 0.0,
-                                1.0, 0.0,
-                                0.0, 1.0,
-                                1.0, 0.0,
-                                0.0, 1.0,
-                                1.0, 1.0
-                            ],
+                            data: uv,
                         }
                     };
                     const bufferInfo = twgl.createBufferInfoFromArrays(gl, arrays);
@@ -100,20 +85,46 @@ export default class DrawTile {
                     twgl.drawBufferInfo(gl, bufferInfo, gl.TRIANGLES);
                 }
 
-                console.log("绘制结束");
                 resolve();
             });
         });
     }
 
-    _buildPositionAndUV(topLeft, tileLength) {
-        const northWest = topLeft;
-        const northEast = [topLeft[0] + tileLength, topLeft[1]];
-        const southWest = [topLeft[0], topLeft[1] - tileLength];
+    _buildPositionAndUV(topLeft, tileLength, mercBounds) {
+        const singleLenghth = tileLength / this._division;
 
-        const xs = interpolateLine(northWest, northEast, {
-            division: this._division
-        });
+        const position = [];
+        const uv = [];
+
+        for (let i = 0; i < this._division; i++) {
+            for (let j = 0; j < this._division; j++) {
+                const feature = convertTargetBoundsToPolygon([
+                    topLeft[0] + singleLenghth * i,
+                    topLeft[1] - singleLenghth * j,
+                ], singleLenghth, 1);
+
+                const coordinates = feature.geometry.coordinates[0].map(c => this._lngLatToTileRelativeCoordinate(mercBounds, c));
+
+                position.push(...[
+                    ...coordinates[3],
+                    ...coordinates[2],
+                    ...coordinates[0],
+                    ...coordinates[2],
+                    ...coordinates[0],
+                    ...coordinates[1]
+                ]);
+                uv.push(...[
+                    i / this._division, j / this._division,
+                    (i + 1) / this._division, j / this._division,
+                    i / this._division, (j + 1) / this._division,
+                    (i + 1) / this._division, j / this._division,
+                    i / this._division, (j + 1) / this._division,
+                    (i + 1) / this._division, (j + 1) / this._division
+                ])
+            }
+        }
+
+        return {position, uv};
     }
 
     _lngLatToTileRelativeCoordinate(bounds, lngLat) {

@@ -90,7 +90,7 @@ export default class CustomSource {
                 'line-cap': 'round'
             },
             'paint': {
-                'line-color': '#009200',
+                'line-color': '#000000',
                 'line-width': 1,
                 'line-opacity': 1
             }
@@ -116,6 +116,8 @@ export default class CustomSource {
             },
             'paint': {
                 'text-color': '#009200',
+                'text-halo-color': '#ffffff',
+                'text-halo-width': 2,
                 'text-opacity': 1
             }
         });
@@ -210,17 +212,19 @@ export default class CustomSource {
         const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner, TileWidth} = tileMatrices[targetZoomLevel];
 
         const layerBounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
-        bounds[0][0] = Math.max(bounds[0][0], layerBounds[0]); // minLng
-        bounds[0][1] = Math.max(bounds[0][1], layerBounds[1]); // minLat
+        const clipBounds = [[0, 0], [0, 0]];
 
-        bounds[1][0] = Math.min(bounds[1][0], layerBounds[2]); // maxLng
-        bounds[1][1] = Math.min(bounds[1][1], layerBounds[3]); // maxLat
+        clipBounds[0][0] = Math.max(bounds[0][0], layerBounds[0]); // minLng
+        clipBounds[0][1] = Math.max(bounds[0][1], layerBounds[1]); // minLat
 
-        if ((bounds[0][0] >= bounds[1][0]) || (bounds[0][1] >= bounds[1][1])) {
+        clipBounds[1][0] = Math.min(bounds[1][0], layerBounds[2]); // maxLng
+        clipBounds[1][1] = Math.min(bounds[1][1], layerBounds[3]); // maxLat
+
+        if ((clipBounds[0][0] >= clipBounds[1][0]) || (clipBounds[0][1] >= clipBounds[1][1])) {
             return [];
         }
 
-        const targetBounds = convertMapBounds(bounds);
+        const targetBounds = convertMapBounds(clipBounds);
 
         // targetBounds[0][0] = Math.max(targetBounds[0][0], -649750);
         // targetBounds[0][1] = Math.max(targetBounds[0][1], -150250.0);

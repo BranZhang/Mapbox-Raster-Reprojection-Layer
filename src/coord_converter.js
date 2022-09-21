@@ -42,7 +42,7 @@ function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1) {
     const northEast = [topLeft[0] + tileLength, topLeft[1]];
     const northWest = topLeft;
 
-    const coordinates = [southWest];
+    const coordinates = [converter.inverse(southWest)];
 
     coordinates.push(...interpolateLine(southWest, southEast, {division, includeStart: false}));
     coordinates.push(...interpolateLine(southEast, northEast, {division, includeStart: false}));
@@ -54,7 +54,7 @@ function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1) {
         'geometry': {
             'type': 'Polygon',
             coordinates: [
-                coordinates.map(converter.inverse)
+                coordinates
             ]
         }
     };
@@ -64,10 +64,10 @@ function interpolateLine(start, end, {division, includeStart = true}) {
     const result = [];
 
     for (let i = (includeStart ? 0 : 1); i <= division; i++) {
-        result.push([
+        result.push(converter.inverse([
             start[0] + (end[0] - start[0]) * (i / division),
             start[1] + (end[1] - start[1]) * (i / division)
-        ]);
+        ]));
     }
 
     return result;
