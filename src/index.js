@@ -1,4 +1,5 @@
 import './base.css';
+import * as dat from 'dat.gui';
 
 import CustomSource from "./custom_source.js";
 
@@ -13,16 +14,12 @@ const map = new mapboxgl.Map({
 });
 
 map.showTileBoundaries = true;
+let customSource;
 
-map.once('load', () => {
-    createDebugLayer();
-});
-
-function createDebugLayer() {
-    const customSource = new CustomSource({
+map.on('load', () => {
+    customSource = new CustomSource(map, {
         wmtsUrl: 'https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS',
-        map,
-        debug: true
+        tileSize: 256
     });
 
     map.addSource('custom-source', customSource);
@@ -36,50 +33,24 @@ function createDebugLayer() {
         }
     });
 
-    map.addSource('triangle', {
-        'type': 'geojson',
-        'data': {
-            'type': 'FeatureCollection',
-            'features': []
+    createDatGUI();
+});
+
+const params = {
+    tileInfo: false,
+    colorfulF: false
+}
+
+function createDatGUI() {
+    const gui = new dat.GUI();
+    gui.add(params, 'tileInfo').onChange(() => {
+        if (params.tileInfo) {
+            customSource.showTileInfoLayer();
+        } else {
+            customSource.removeTileInfoLayer();
         }
     });
-
-    map.addLayer({
-        'id': 'triangle',
-        'type': 'line',
-        'source': 'triangle',
-        'layout': {
-            'line-join': 'round',
-            'line-cap': 'round'
-        },
-        'paint': {
-            'line-color': '#f00',
-            'line-width': 0.5,
-            'line-opacity': 1
-        }
-    });
-
-    map.addSource('triangle-center', {
-        'type': 'geojson',
-        'data': {
-            'type': 'FeatureCollection',
-            'features': []
-        }
-    });
-
-    map.addLayer({
-        'id': 'triangle-center',
-        'type': 'symbol',
-        'source': 'triangle-center',
-        'layout': {
-            'text-field': ['concat', 'x:', ['get', 'x'], '\n', 'y:', ['get', 'y'], '\n', 'z:', ['get', 'z']],
-            'text-allow-overlap': true,
-            'text-rotation-alignment': 'map',
-            'text-size': 20
-        },
-        'paint': {
-            'text-color': '#f00',
-            'text-opacity': 1
-        }
+    gui.add(params, 'colorfulF').onChange(() => {
+        customSource.colorfulF = params.colorfulF;
     });
 }

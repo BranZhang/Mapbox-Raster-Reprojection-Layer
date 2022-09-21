@@ -6,68 +6,180 @@ import center from "@turf/center";
 import {draw} from "./draw.js";
 
 const merc = new SphericalMercator();
+let func;
 
 export default class CustomSource {
-    constructor({wmtsUrl, map, debug}) {
+    constructor(map, {wmtsUrl, tileSize = 256, showTileInfo = false}) {
         this.type = 'custom';
-        this.tileSize = 256;
-        // this._wmtsUrl = wmtsUrl;
-        this._map = map;
-
-        this.debug = !!debug;
 
         this.serviceIdentification = this._getWMTSServiceConfig(wmtsUrl);
+        this.tileSize = tileSize;
+        this.showTileInfo = showTileInfo;
+        this._map = map;
+
+        this.targetTilesMap = window.targetTilesMap = new Map();
     }
 
     async loadTile({z, x, y}) {
         await this.serviceIdentification;
 
-        let mercatorTileBbox = merc.bbox(x, y, z);
-        mercatorTileBbox = [[mercatorTileBbox[0], mercatorTileBbox[1]], [mercatorTileBbox[2], mercatorTileBbox[3]]];
-
-        const mapCenter = this._map.getCenter();
-        const {minX, minY} = merc.xyz(
-            [mapCenter.lng, mapCenter.lat, mapCenter.lng, mapCenter.lat],
-            z
-        );
+        // console.log('loadTile', {z, x, y});
 
         let targetTilesBounds;
 
-        if (this.debug && (minX !== x || minY !== y)) {
-            // in debug mode, only display screen center tile.
-            targetTilesBounds = {
-                'type': 'FeatureCollection',
-                features: []
-            };
+        const tileKey = this._getKey(x, y, z);
+
+        if (this.targetTilesMap.has(tileKey)) {
+            targetTilesBounds = this.targetTilesMap.get(tileKey).data;
         } else {
+            let mapboxTileBbox = merc.bbox(x, y, z);
+            mapboxTileBbox = [[mapboxTileBbox[0], mapboxTileBbox[1]], [mapboxTileBbox[2], mapboxTileBbox[3]]];
+
+            // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
             targetTilesBounds = this._targetTiles(
-                mercatorTileBbox,
+                mapboxTileBbox,
                 1 / this._map.transform.projection.pixelsPerMeter(
                     0,
-                    512 * Math.pow(2, z)
+                    this._map.transform.tileSize * Math.pow(2, this.tileSize === 512 ? z : z - 1)
                 ));
 
-            console.log(targetTilesBounds);
-            this._map.getSource('triangle').setData(targetTilesBounds);
-
-            const targetTilesCenter = {
-                'type': 'FeatureCollection',
-                features: targetTilesBounds.features.map(f => center(f, {properties: f.properties}))
-            };
-            this._map.getSource('triangle-center').setData(targetTilesCenter);
+            this.targetTilesMap.set(tileKey, {
+                data: targetTilesBounds,
+                mapboxX: x,
+                mapboxY: y,
+                mapboxZ: z
+            });
         }
 
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = this.tileSize;
 
-        if (targetTilesBounds.features.length > 0) {
-            // draw(canvas.getContext("webgl"), targetTilesBounds.features);
-            await draw(canvas, targetTilesBounds.features, mercatorTileBbox);
-
-            console.log("收到绘制结果");
-        }
+        // if (targetTilesBounds.features.length > 0) {
+        //     await draw(canvas, targetTilesBounds.features, mapboxTileBbox);
+        // }
 
         return canvas;
+    }
+
+    async unloadTile({z, x, y}) {
+        this.targetTilesMap.delete(this._getKey(x, y, z));
+    }
+
+    /**
+     * display arcgis wmts tiles boundaries and tile ids.
+     */
+    showTileInfoLayer() {
+        this.showTileInfo = true;
+
+        this._map.addSource('custom-source-debug-tile-bounds', {
+            'type': 'geojson',
+            'data': {
+                'type': 'FeatureCollection',
+                'features': []
+            }
+        });
+
+        this._map.addLayer({
+            'id': 'custom-source-debug-tile-bounds',
+            'type': 'line',
+            'source': 'custom-source-debug-tile-bounds',
+            'layout': {
+                'line-join': 'round',
+                'line-cap': 'round'
+            },
+            'paint': {
+                'line-color': '#009200',
+                'line-width': 1,
+                'line-opacity': 1
+            }
+        });
+
+        this._map.addSource('custom-source-debug-tile-center', {
+            'type': 'geojson',
+            'data': {
+                'type': 'FeatureCollection',
+                'features': []
+            }
+        });
+
+        this._map.addLayer({
+            'id': 'custom-source-debug-tile-center',
+            'type': 'symbol',
+            'source': 'custom-source-debug-tile-center',
+            'layout': {
+                'text-field': ['concat', 'x:', ['get', 'x'], '\n', 'y:', ['get', 'y'], '\n', 'z:', ['get', 'z']],
+                'text-allow-overlap': true,
+                'text-rotation-alignment': 'map',
+                'text-size': 20
+            },
+            'paint': {
+                'text-color': '#009200',
+                'text-opacity': 1
+            }
+        });
+
+        func = this._updateTileInfo.bind(this);
+        this._map.on('move', func);
+        this._updateTileInfo();
+    }
+
+    _updateTileInfo() {
+        const tilePolygons = {
+            'type': 'FeatureCollection',
+            features: []
+        };
+
+        const tileIDs = this._map.transform.coveringTiles({
+            tileSize: this.tileSize,
+            roundZoom: true
+        });
+
+        tileIDs.map(tileID => {
+            const key = this._getKey(tileID.canonical.x, tileID.canonical.y, tileID.canonical.z);
+            if (this.targetTilesMap.has(key)) {
+                const tiles = this.targetTilesMap.get(key);
+                tilePolygons.features.push(...tiles.data.map(tile => {
+                    const {topLeft, tileLengthInMeters} = tile;
+                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, 4);
+                    feature.properties = {x: tile.x, y: tile.y, z: tile.z};
+                    return feature;
+                }));
+            }
+        });
+
+
+        this._map.getSource('custom-source-debug-tile-bounds').setData(tilePolygons);
+
+        const tileCenter = {
+            'type': 'FeatureCollection',
+            features: tilePolygons.features.map(f => center(f, {properties: f.properties}))
+        };
+        this._map.getSource('custom-source-debug-tile-center').setData(tileCenter);
+    }
+
+    /**
+     * remove arcgis wmts tiles boundaries and tile ids.
+     */
+    removeTileInfoLayer() {
+        this.showTileInfo = false;
+
+        this._map.off('move', func);
+
+        if (this._map.getLayer('custom-source-debug-tile-center')) {
+            this._map.removeLayer('custom-source-debug-tile-center');
+        }
+
+        if (this._map.getLayer('custom-source-debug-tile-bounds')) {
+            this._map.removeLayer('custom-source-debug-tile-bounds');
+        }
+
+        if (this._map.getSource('custom-source-debug-tile-center')) {
+            this._map.removeSource('custom-source-debug-tile-center');
+        }
+
+        if (this._map.getSource('custom-source-debug-tile-bounds')) {
+            this._map.removeSource('custom-source-debug-tile-bounds');
+        }
     }
 
     /**
@@ -99,10 +211,7 @@ export default class CustomSource {
         bounds[1][1] = Math.min(bounds[1][1], layerBounds[3]); // maxLat
 
         if ((bounds[0][0] >= bounds[1][0]) || (bounds[0][1] >= bounds[1][1])) {
-            return {
-                'type': 'FeatureCollection',
-                features: []
-            };
+            return [];
         }
 
         const targetBounds = convertMapBounds(bounds);
@@ -133,24 +242,14 @@ export default class CustomSource {
                         x: i,
                         y: j,
                         z: targetZoomLevel,
+                        tileLengthInMeters,
                         topLeft: tileTopLeft
                     })
                 }
             }
         }
 
-        return {
-            'type': 'FeatureCollection',
-            features: containedTiles.map(t => {
-                const feature = convertTargetBoundsToPolygon(t.topLeft, tileLengthInMeters, 1);
-                feature.properties = {
-                    x: t.x,
-                    y: t.y,
-                    z: t.z,
-                }
-                return feature;
-            })
-        };
+        return containedTiles;
     }
 
     async _getWMTSServiceConfig(wmtsUrl) {
@@ -165,4 +264,7 @@ export default class CustomSource {
         return (point[0] >= bbox[0][0] && point[0] < bbox[1][0]) && (point[1] >= bbox[0][1] && point[1] < bbox[1][1]);
     }
 
+    _getKey(x, y, z) {
+        return `${x}/${y}/${z}`;
+    }
 }
