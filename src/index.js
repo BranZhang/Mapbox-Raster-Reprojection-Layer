@@ -19,7 +19,7 @@ let customSource;
 map.on('load', () => {
     customSource = new CustomSource(map, {
         wmtsUrl: 'https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS',
-        tileSize: 256
+        tileSize: 512
     });
 
     map.addSource('custom-source', customSource);
@@ -38,11 +38,15 @@ map.on('load', () => {
 
 const params = {
     tileInfo: false,
-    colorfulF: false
+    colorfulF: false,
+    opacity: 1
 }
 
 function createDatGUI() {
     const gui = new dat.GUI();
+    gui.add(params, 'opacity', 0, 1).onChange(() => {
+        map.setPaintProperty('custom-source', 'raster-opacity', params.opacity);
+    });
     gui.add(params, 'tileInfo').onChange(() => {
         if (params.tileInfo) {
             customSource.showTileInfoLayer();

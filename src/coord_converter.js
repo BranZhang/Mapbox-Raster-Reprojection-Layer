@@ -36,7 +36,7 @@ function convertMapBounds(mapBounds) {
     ]];
 }
 
-function convertTargetBoundsToPolygon(topLeft, tileLength, divide = 4) {
+function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1) {
     const southWest = [topLeft[0], topLeft[1] - tileLength];
     const southEast = [topLeft[0] + tileLength, topLeft[1] - tileLength];
     const northEast = [topLeft[0] + tileLength, topLeft[1]];
@@ -44,10 +44,10 @@ function convertTargetBoundsToPolygon(topLeft, tileLength, divide = 4) {
 
     const coordinates = [southWest];
 
-    coordinates.push(...interpolateLine(southWest, southEast, divide));
-    coordinates.push(...interpolateLine(southEast, northEast, divide));
-    coordinates.push(...interpolateLine(northEast, northWest, divide));
-    coordinates.push(...interpolateLine(northWest, southWest, divide));
+    coordinates.push(...interpolateLine(southWest, southEast, {division, includeStart: false}));
+    coordinates.push(...interpolateLine(southEast, northEast, {division, includeStart: false}));
+    coordinates.push(...interpolateLine(northEast, northWest, {division, includeStart: false}));
+    coordinates.push(...interpolateLine(northWest, southWest, {division, includeStart: false}));
 
     return {
         'type': 'Feature',
@@ -60,14 +60,14 @@ function convertTargetBoundsToPolygon(topLeft, tileLength, divide = 4) {
     };
 }
 
-function interpolateLine(start, end, divide) {
+function interpolateLine(start, end, {division, includeStart = true}) {
     const result = [];
 
-    for (let i = 1; i <= divide; i++) {
+    for (let i = (includeStart ? 0 : 1); i <= division; i++) {
         result.push([
-            start[0] + (end[0] - start[0]) * (i / divide),
-            start[1] + (end[1] - start[1]) * (i / divide)
-        ])
+            start[0] + (end[0] - start[0]) * (i / division),
+            start[1] + (end[1] - start[1]) * (i / division)
+        ]);
     }
 
     return result;
@@ -75,5 +75,6 @@ function interpolateLine(start, end, divide) {
 
 export {
     convertMapBounds,
+    interpolateLine,
     convertTargetBoundsToPolygon
 }

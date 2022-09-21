@@ -1,23 +1,28 @@
 import WMTSCapabilities from "ol/format/WMTSCapabilities";
 import SphericalMercator from "@mapbox/sphericalmercator";
-import {convertMapBounds, convertTargetBoundsToPolygon} from "./coord_converter";
+import {convertMapBounds, convertTargetBoundsToPolygon} from "./coord_converter.js";
 import center from "@turf/center";
 
-import {draw} from "./draw.js";
+import DrawTile from "./draw_tile.js";
 
-const merc = new SphericalMercator();
-let func;
+let updateTileInfoFunc;
 
 export default class CustomSource {
-    constructor(map, {wmtsUrl, tileSize = 256, showTileInfo = false}) {
+    constructor(map, {wmtsUrl, tileSize = 256, division = 4}) {
         this.type = 'custom';
 
         this.serviceIdentification = this._getWMTSServiceConfig(wmtsUrl);
         this.tileSize = tileSize;
-        this.showTileInfo = showTileInfo;
         this._map = map;
+        this._division = division;
 
         this.targetTilesMap = window.targetTilesMap = new Map();
+        this._merc = new SphericalMercator();
+        this._drawTile = new DrawTile({
+            merc: this._merc,
+            tileSize: this.tileSize,
+            division: this._division
+        });
     }
 
     async loadTile({z, x, y}) {
@@ -26,15 +31,14 @@ export default class CustomSource {
         // console.log('loadTile', {z, x, y});
 
         let targetTilesBounds;
+        let mapboxTileBbox = this._merc.bbox(x, y, z);
+        mapboxTileBbox = [[mapboxTileBbox[0], mapboxTileBbox[1]], [mapboxTileBbox[2], mapboxTileBbox[3]]];
 
         const tileKey = this._getKey(x, y, z);
 
         if (this.targetTilesMap.has(tileKey)) {
             targetTilesBounds = this.targetTilesMap.get(tileKey).data;
         } else {
-            let mapboxTileBbox = merc.bbox(x, y, z);
-            mapboxTileBbox = [[mapboxTileBbox[0], mapboxTileBbox[1]], [mapboxTileBbox[2], mapboxTileBbox[3]]];
-
             // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
             targetTilesBounds = this._targetTiles(
                 mapboxTileBbox,
@@ -54,9 +58,9 @@ export default class CustomSource {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = this.tileSize;
 
-        // if (targetTilesBounds.features.length > 0) {
-        //     await draw(canvas, targetTilesBounds.features, mapboxTileBbox);
-        // }
+        if (targetTilesBounds.length > 0) {
+            await this._drawTile.draw(canvas, targetTilesBounds, mapboxTileBbox);
+        }
 
         return canvas;
     }
@@ -69,8 +73,6 @@ export default class CustomSource {
      * display arcgis wmts tiles boundaries and tile ids.
      */
     showTileInfoLayer() {
-        this.showTileInfo = true;
-
         this._map.addSource('custom-source-debug-tile-bounds', {
             'type': 'geojson',
             'data': {
@@ -118,8 +120,8 @@ export default class CustomSource {
             }
         });
 
-        func = this._updateTileInfo.bind(this);
-        this._map.on('move', func);
+        updateTileInfoFunc = this._updateTileInfo.bind(this);
+        this._map.on('move', updateTileInfoFunc);
         this._updateTileInfo();
     }
 
@@ -140,7 +142,7 @@ export default class CustomSource {
                 const tiles = this.targetTilesMap.get(key);
                 tilePolygons.features.push(...tiles.data.map(tile => {
                     const {topLeft, tileLengthInMeters} = tile;
-                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, 4);
+                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, this._division);
                     feature.properties = {x: tile.x, y: tile.y, z: tile.z};
                     return feature;
                 }));
@@ -161,9 +163,8 @@ export default class CustomSource {
      * remove arcgis wmts tiles boundaries and tile ids.
      */
     removeTileInfoLayer() {
-        this.showTileInfo = false;
-
-        this._map.off('move', func);
+        this._map.off('move', updateTileInfoFunc);
+        updateTileInfoFunc = null;
 
         if (this._map.getLayer('custom-source-debug-tile-center')) {
             this._map.removeLayer('custom-source-debug-tile-center');
@@ -180,6 +181,10 @@ export default class CustomSource {
         if (this._map.getSource('custom-source-debug-tile-bounds')) {
             this._map.removeSource('custom-source-debug-tile-bounds');
         }
+    }
+
+    set colorfulF(val) {
+        this._drawTile.colorfulF = !!val;
     }
 
     /**
@@ -201,7 +206,8 @@ export default class CustomSource {
             targetZoomLevel++;
         }
 
-        const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner} = tileMatrices[targetZoomLevel];
+        // 假设 TileWidth 等于 TileHeight
+        const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner, TileWidth} = tileMatrices[targetZoomLevel];
 
         const layerBounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
         bounds[0][0] = Math.max(bounds[0][0], layerBounds[0]); // minLng
@@ -216,15 +222,21 @@ export default class CustomSource {
 
         const targetBounds = convertMapBounds(bounds);
 
-        const tileLengthInMeters = ScaleDenominator * 0.00028 * 256;
+        // targetBounds[0][0] = Math.max(targetBounds[0][0], -649750);
+        // targetBounds[0][1] = Math.max(targetBounds[0][1], -150250.0);
+        // targetBounds[1][0] = Math.min(targetBounds[1][0], 1350250.0);
+        // targetBounds[1][1] = Math.min(targetBounds[1][1], 1449750.0);
+
+        // ？？0.00028
+        const tileLengthInMeters = ScaleDenominator * 0.00028 * TileWidth;
 
         const containedTiles = [];
 
         const startI = Math.max(0, Math.floor((targetBounds[0][0] - TopLeftCorner[0]) / tileLengthInMeters));
-        const endI = Math.min(MatrixWidth, Math.ceil((targetBounds[1][0] - TopLeftCorner[0]) / tileLengthInMeters));
+        const endI = Math.min(MatrixWidth - 1, Math.ceil((targetBounds[1][0] - TopLeftCorner[0]) / tileLengthInMeters));
 
         const startJ = Math.max(0, Math.floor((TopLeftCorner[1] - targetBounds[1][1]) / tileLengthInMeters));
-        const endJ = Math.min(MatrixHeight, Math.floor((TopLeftCorner[1] - targetBounds[0][1]) / tileLengthInMeters));
+        const endJ = Math.min(MatrixHeight - 1, Math.floor((TopLeftCorner[1] - targetBounds[0][1]) / tileLengthInMeters));
 
         for (let i = startI; i <= endI; i++) {
             for (let j = startJ; j <= endJ; j++) {
