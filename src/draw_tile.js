@@ -2,17 +2,16 @@ import * as twgl from 'twgl.js';
 import vs from './vertex-shader.glsl';
 import fs from './fragment-shader.glsl';
 
-import {interpolateLine, convertTargetBoundsToPolygon} from "./coord_converter.js";
+import {convertTargetBoundsToPolygon} from "./coord_converter.js";
 
 import greenTexture from './textures/green.png';
 import yellowTexture from './textures/yellow.png';
-import blueTexture from './textures/blue.png';
 
 
 export default class DrawTile {
     constructor({tileSize, merc, division}) {
         this.tileSize = tileSize;
-        this.colorfulF = true;
+        this.colorfulF = false;
         this._merc = merc;
         this._division = division;
         this.tileUrl = "";

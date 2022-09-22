@@ -25,6 +25,19 @@ export default class CustomSource {
         });
     }
 
+    async hasTile({z, x, y}) {
+        await this.serviceIdentification;
+
+        const mapboxTileBbox = this._merc.bbox(x, y, z);
+
+        return !(
+            (mapboxTileBbox[0] >= this.sourceBounds[2]) ||
+            (mapboxTileBbox[2] <= this.sourceBounds[0]) ||
+            (mapboxTileBbox[1] <= this.sourceBounds[1]) ||
+            (mapboxTileBbox[3] >= this.sourceBounds[3])
+        );
+    }
+
     async loadTile({z, x, y}) {
         await this.serviceIdentification;
 
@@ -209,14 +222,13 @@ export default class CustomSource {
         // 假设 TileWidth 等于 TileHeight
         const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner, TileWidth} = tileMatrices[targetZoomLevel];
 
-        const layerBounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
         const clipBounds = [[0, 0], [0, 0]];
 
-        clipBounds[0][0] = Math.max(bounds[0][0], layerBounds[0]); // minLng
-        clipBounds[0][1] = Math.max(bounds[0][1], layerBounds[1]); // minLat
+        clipBounds[0][0] = Math.max(bounds[0][0], this.sourceBounds[0]); // minLng
+        clipBounds[0][1] = Math.max(bounds[0][1], this.sourceBounds[1]); // minLat
 
-        clipBounds[1][0] = Math.min(bounds[1][0], layerBounds[2]); // maxLng
-        clipBounds[1][1] = Math.min(bounds[1][1], layerBounds[3]); // maxLat
+        clipBounds[1][0] = Math.min(bounds[1][0], this.sourceBounds[2]); // maxLng
+        clipBounds[1][1] = Math.min(bounds[1][1], this.sourceBounds[3]); // maxLat
 
         if ((clipBounds[0][0] >= clipBounds[1][0]) || (clipBounds[0][1] >= clipBounds[1][1])) {
             return [];
@@ -272,6 +284,8 @@ export default class CustomSource {
 
         const parser = new WMTSCapabilities();
         this.serviceIdentification = parser.read(result);
+
+        this.sourceBounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
 
         const {ResourceURL, Style, TileMatrixSetLink} = this.serviceIdentification.Contents.Layer[0];
         this._drawTile.tileUrl = ResourceURL[0].template
