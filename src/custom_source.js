@@ -28,8 +28,6 @@ export default class CustomSource {
     async loadTile({z, x, y}) {
         await this.serviceIdentification;
 
-        // console.log('loadTile', {z, x, y});
-
         let targetTilesBounds;
         let mapboxTileBbox = this._merc.bbox(x, y, z);
         mapboxTileBbox = [[mapboxTileBbox[0], mapboxTileBbox[1]], [mapboxTileBbox[2], mapboxTileBbox[3]]];
@@ -274,6 +272,11 @@ export default class CustomSource {
 
         const parser = new WMTSCapabilities();
         this.serviceIdentification = parser.read(result);
+
+        const {ResourceURL, Style, TileMatrixSetLink} = this.serviceIdentification.Contents.Layer[0];
+        this._drawTile.tileUrl = ResourceURL[0].template
+            .replace(/{Style}/g, Style[0].Identifier)
+            .replace(/{TileMatrixSet}/g, TileMatrixSetLink[0].TileMatrixSet);
     }
 
     _bboxContains(bbox, point) {

@@ -12,9 +12,10 @@ import blueTexture from './textures/blue.png';
 export default class DrawTile {
     constructor({tileSize, merc, division}) {
         this.tileSize = tileSize;
-        this.colorfulF = false;
+        this.colorfulF = true;
         this._merc = merc;
         this._division = division;
+        this.tileUrl = "";
     }
 
     draw(canvas, tilesBounds, bounds) {
@@ -24,21 +25,24 @@ export default class DrawTile {
         const mercBounds = [
             this._merc.forward(bounds[0]),
             this._merc.forward(bounds[1])
-        ]
+        ];
         // 创建着色器
         const programInfo = twgl.createProgramInfo(gl, [vs, fs]);
         gl.useProgram(programInfo.program);
 
         const tileTextures = {};
 
-        if (this.colorfulF) {
-            tileTextures['blue'] = {src: blueTexture};
-            tileTextures['green'] = {src: greenTexture};
-            tileTextures['yellow'] = {src: yellowTexture};
-        } else {
-            for (let i = 0; i < tilesBounds.length; i++) {
+        for (let i = 0; i < tilesBounds.length; i++) {
+            if (this.colorfulF) {
                 tileTextures[`tile/${tilesBounds[i].x}/${tilesBounds[i].y}/${tilesBounds[i].z}`] = {
-                    src: `https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS/tile/1.0.0/OS_Open_Raster/default/default028mm/${tilesBounds[i].z}/${tilesBounds[i].y}/${tilesBounds[i].x}.png`
+                    src: ((tilesBounds[i].x + tilesBounds[i].y) % 2 === 0) ? greenTexture : yellowTexture
+                };
+            } else {
+                tileTextures[`tile/${tilesBounds[i].x}/${tilesBounds[i].y}/${tilesBounds[i].z}`] = {
+                    src: this.tileUrl
+                        .replace(/{TileMatrix}/g, tilesBounds[i].z)
+                        .replace(/{TileRow}/g, tilesBounds[i].y)
+                        .replace(/{TileCol}/g, tilesBounds[i].x)
                 };
             }
         }
@@ -55,14 +59,9 @@ export default class DrawTile {
 
                     // 传入全局变量
                     const uniforms = {
-                        u_tilesize: this.tileSize
+                        u_tilesize: this.tileSize,
+                        u_image: textures[`tile/${x}/${y}/${z}`]
                     };
-
-                    if (this.colorfulF) {
-                        uniforms['u_image'] = ts[(x + y) % 3];
-                    } else {
-                        uniforms['u_image'] = textures[`tile/${x}/${y}/${z}`];
-                    }
 
                     twgl.setUniforms(programInfo, uniforms);
 
