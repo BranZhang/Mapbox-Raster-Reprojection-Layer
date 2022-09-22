@@ -17,13 +17,13 @@ export default class DrawTile {
         this.tileUrl = "";
     }
 
-    draw(canvas, tilesBounds, bounds) {
-        const gl = canvas.getContext("webgl", {willReadFrequently: true});
+    draw(gl, tilesBounds, mapboxBounds) {
+        // const gl = canvas.getContext("webgl", {willReadFrequently: true});
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
         const mercBounds = [
-            this._merc.forward(bounds[0]),
-            this._merc.forward(bounds[1])
+            this._merc.forward(mapboxBounds[0]),
+            this._merc.forward(mapboxBounds[1])
         ];
         // 创建着色器
         const programInfo = twgl.createProgramInfo(gl, [vs, fs]);
@@ -48,8 +48,6 @@ export default class DrawTile {
 
         return new Promise((resolve, reject) => {
             twgl.createTextures(gl, tileTextures, (err, textures, sources) => {
-                const ts = [textures.blue, textures.green, textures.yellow];
-
                 // 遍历 tilesBounds，依次绘制
                 for (let i = 0; i < tilesBounds.length; i++) {
                     const tileBounds = tilesBounds[i];
@@ -125,6 +123,13 @@ export default class DrawTile {
         return {position, uv};
     }
 
+    /**
+     * convert lngLat to a position relative to bounds top left.
+     * @param bounds
+     * @param lngLat
+     * @returns {number[]} position x, y, unit equal to bounds.
+     * @private
+     */
     _lngLatToTileRelativeCoordinate(bounds, lngLat) {
         const mercPos = this._merc.forward(lngLat);
         const x = (mercPos[0] - bounds[0][0]) / (bounds[1][0] - bounds[0][0]) * this.tileSize;
@@ -133,24 +138,3 @@ export default class DrawTile {
         return [x, y];
     }
 }
-
-
-// const context = canvas.getContext('2d', {willReadFrequently: true});
-//
-// context.fillStyle = '#ffffff';
-// context.strokeRect(0, 0, this.tileSize, this.tileSize);
-//
-// context.strokeStyle = '#ff0000';
-// context.lineWidth = 1;
-//
-// features.forEach(feature => {
-//     context.beginPath();
-//     const begin = _lngLatToTileRelativeCoordinate(bounds, feature.geometry.coordinates[0][0]);
-//     context.moveTo(begin[0], begin[1]);
-//     for (let i = 1; i < feature.geometry.coordinates[0].length; i++) {
-//         const position = _lngLatToTileRelativeCoordinate(bounds, feature.geometry.coordinates[0][i]);
-//         context.lineTo(position[0], position[1]);
-//     }
-//     context.stroke();
-// });
-

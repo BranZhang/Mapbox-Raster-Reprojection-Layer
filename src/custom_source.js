@@ -23,6 +23,15 @@ export default class CustomSource {
             tileSize: this.tileSize,
             division: this._division
         });
+
+        this._canvasList = new Array(2);
+        for (let i = 0; i < this._canvasList.length; i++) {
+            this._canvasList[i] = {
+                canvas: null,
+                usable: true
+            };
+        }
+        this._applyList = [];
     }
 
     async hasTile({z, x, y}) {
@@ -66,18 +75,50 @@ export default class CustomSource {
             });
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = canvas.height = this.tileSize;
+        const canvasObj = await this.applyCanvas();
+
+        const gl = canvasObj.canvas.getContext("webgl", {willReadFrequently: true});
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         if (targetTilesBounds.length > 0) {
-            await this._drawTile.draw(canvas, targetTilesBounds, mapboxTileBbox);
+            await this._drawTile.draw(gl, targetTilesBounds, mapboxTileBbox);
         }
 
-        return canvas;
+        this.returnCanvas(canvasObj);
+        return canvasObj.canvas;
     }
 
     async unloadTile({z, x, y}) {
         this.targetTilesMap.delete(this._getKey(x, y, z));
+    }
+
+    async applyCanvas() {
+        for (let i = 0; i < this._canvasList.length; i++) {
+            if (this._canvasList[i].usable) {
+                if (!this._canvasList[i].canvas) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = canvas.height = this.tileSize;
+
+                    this._canvasList[i].canvas = canvas;
+                }
+
+                this._canvasList[i].usable = false;
+                return this._canvasList[i];
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            this._applyList.push(resolve);
+        });
+    }
+
+    returnCanvas(canvasObj) {
+        canvasObj.usable = true;
+        const apply = this._applyList.shift();
+
+        if (apply) {
+            apply(this.applyCanvas());
+        }
     }
 
     /**

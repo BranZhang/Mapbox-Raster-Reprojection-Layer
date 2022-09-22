@@ -63,5 +63,6 @@ function createDatGUI() {
     });
     gui.add(params, 'colorfulF').onChange(() => {
         customSource.colorfulF = params.colorfulF;
+        customSource.update();
     });
 }
