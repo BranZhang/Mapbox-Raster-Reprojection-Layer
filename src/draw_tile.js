@@ -7,6 +7,9 @@ import {convertTargetBoundsToPolygon} from "./coord_converter.js";
 import greenTexture from './textures/green.png';
 import yellowTexture from './textures/yellow.png';
 
+twgl.setDefaults({
+    textureColor: [0, 0, 0, 0],  // make initial color transparent black
+});
 
 export default class DrawTile {
     constructor({tileSize, merc, division}) {
@@ -18,7 +21,6 @@ export default class DrawTile {
     }
 
     draw(gl, tilesBounds, mapboxBounds) {
-        // const gl = canvas.getContext("webgl", {willReadFrequently: true});
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
         const mercBounds = [
