@@ -277,11 +277,6 @@ export default class CustomSource {
 
         const targetBounds = convertMapBounds(clipBounds);
 
-        // targetBounds[0][0] = Math.max(targetBounds[0][0], -649750);
-        // targetBounds[0][1] = Math.max(targetBounds[0][1], -150250.0);
-        // targetBounds[1][0] = Math.min(targetBounds[1][0], 1350250.0);
-        // targetBounds[1][1] = Math.min(targetBounds[1][1], 1449750.0);
-
         // ？？0.00028
         const tileLengthInMeters = ScaleDenominator * 0.00028 * TileWidth;
 
@@ -304,13 +299,18 @@ export default class CustomSource {
                 const tileBottomLeft = [tileTopLeft[0], tileTopLeft[1] - tileLengthInMeters];
                 const tileBottomRight = [tileTopLeft[0] + tileLengthInMeters, tileTopLeft[1] - tileLengthInMeters];
 
-                if (this._bboxContains(targetBounds, tileTopLeft) || this._bboxContains(targetBounds, tileTopRight) || this._bboxContains(targetBounds, tileBottomLeft) || this._bboxContains(targetBounds, tileBottomRight)) {
+                if (this._bboxContains(targetBounds, tileTopLeft) ||
+                    this._bboxContains(targetBounds, tileTopRight) ||
+                    this._bboxContains(targetBounds, tileBottomLeft) ||
+                    this._bboxContains(targetBounds, tileBottomRight)
+                ) {
                     containedTiles.push({
                         x: i,
                         y: j,
                         z: targetZoomLevel,
                         tileLengthInMeters,
-                        topLeft: tileTopLeft
+                        topLeft: tileTopLeft,
+                        width: TileWidth
                     })
                 }
             }

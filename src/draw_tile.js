@@ -34,16 +34,17 @@ export default class DrawTile {
         const tileTextures = {};
 
         for (let i = 0; i < tilesBounds.length; i++) {
+            const {x, y, z} = tilesBounds[i];
             if (this.colorfulF) {
-                tileTextures[`tile/${tilesBounds[i].x}/${tilesBounds[i].y}/${tilesBounds[i].z}`] = {
-                    src: ((tilesBounds[i].x + tilesBounds[i].y) % 2 === 0) ? greenTexture : yellowTexture
+                tileTextures[`tile/${x}/${y}/${z}`] = {
+                    src: ((x + y) % 2 === 0) ? greenTexture : yellowTexture
                 };
             } else {
-                tileTextures[`tile/${tilesBounds[i].x}/${tilesBounds[i].y}/${tilesBounds[i].z}`] = {
+                tileTextures[`tile/${x}/${y}/${z}`] = {
                     src: this.tileUrl
-                        .replace(/{TileMatrix}/g, tilesBounds[i].z)
-                        .replace(/{TileRow}/g, tilesBounds[i].y)
-                        .replace(/{TileCol}/g, tilesBounds[i].x)
+                        .replace(/{TileMatrix}/g, z)
+                        .replace(/{TileRow}/g, y)
+                        .replace(/{TileCol}/g, x)
                 };
             }
         }
@@ -54,9 +55,8 @@ export default class DrawTile {
                 for (let i = 0; i < tilesBounds.length; i++) {
                     const tileBounds = tilesBounds[i];
 
-                    const {x, y, z, topLeft, tileLengthInMeters} = tileBounds;
+                    const {x, y, z, topLeft, tileLengthInMeters, width} = tileBounds;
 
-                    // 传入全局变量
                     const uniforms = {
                         u_tilesize: this.tileSize,
                         u_image: textures[`tile/${x}/${y}/${z}`]
@@ -66,7 +66,12 @@ export default class DrawTile {
 
                     const {position, uv} = this._buildPositionAndUV(topLeft, tileLengthInMeters, mercBounds);
 
-                    // 传入缓冲数据
+                    // a simple way to avoid edge artifacts,
+                    // copy edge pixels out to a 1px border should be much better.
+                    for (let i = 0; i < uv.length; i++) {
+                        uv[i] = uv[i] * ((width - 2) / width) + (1 / width);
+                    }
+
                     const arrays = {
                         a_position: {
                             numComponents: 2,
