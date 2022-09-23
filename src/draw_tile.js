@@ -24,8 +24,8 @@ export default class DrawTile {
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
         const mercBounds = [
-            this._merc.forward(mapboxBounds[0]),
-            this._merc.forward(mapboxBounds[1])
+            this._merc.forward([mapboxBounds[0], mapboxBounds[1]]),
+            this._merc.forward([mapboxBounds[2], mapboxBounds[3]])
         ];
         // 创建着色器
         const programInfo = twgl.createProgramInfo(gl, [vs, fs]);

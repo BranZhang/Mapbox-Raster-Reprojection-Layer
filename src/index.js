@@ -20,28 +20,36 @@ const map = new mapboxgl.Map({
     hash: true
 });
 
+const wmtsUrl = 'https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS';
 map.showTileBoundaries = params.showTileBoundaries;
 let customSource;
 
 map.on('load', () => {
-    customSource = new CustomSource(map, {
-        wmtsUrl: 'https://tiles.arcgis.com/tiles/qHLhLQrcvEnxjtPr/arcgis/rest/services/OS_Open_Raster/MapServer/WMTS',
-        tileSize: 512,
-        division: 4
-    });
 
-    map.addSource('custom-source', customSource);
+    fetch(wmtsUrl)
+        .then(function (response) {
+            return response.text();
+        })
+        .then(function (text) {
+            customSource = new CustomSource(map, {
+                wmtsText: text,
+                tileSize: 512,
+                division: 4
+            });
 
-    map.addLayer({
-        id: 'custom-source',
-        type: 'raster',
-        source: 'custom-source',
-        paint: {
-            'raster-opacity': 1
-        }
-    });
+            map.addSource('custom-source', customSource);
 
-    createDatGUI();
+            map.addLayer({
+                id: 'custom-source',
+                type: 'raster',
+                source: 'custom-source',
+                paint: {
+                    'raster-opacity': 1
+                }
+            });
+
+            createDatGUI();
+        });
 });
 
 function createDatGUI() {

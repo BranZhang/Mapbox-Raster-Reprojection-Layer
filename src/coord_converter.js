@@ -1,4 +1,6 @@
 import proj4 from "proj4";
+import * as proj from "ol/proj";
+import {register} from 'ol/proj/proj4';
 
 proj4.defs([
     [
@@ -13,27 +15,12 @@ proj4.defs([
     ]
 ]);
 
+register(proj4);
+
 const converter = proj4('WGS84', 'EPSG:27700');
 
-// console.log(converter.inverse([-649750.0, -150250.0]));
-// console.log(converter.inverse([1350250.0, 1449750.0]));
-
 function convertMapBounds(mapBounds) {
-    const southWest = converter.forward(mapBounds[0]);
-    const southEast = converter.forward([mapBounds[1][0], mapBounds[0][1]]);
-    const northEast = converter.forward(mapBounds[1]);
-    const northWest = converter.forward([mapBounds[0][0], mapBounds[1][1]]);
-
-    const southCenter = converter.forward([(mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[0][1]]);
-    const northCenter = converter.forward([(mapBounds[0][0] + mapBounds[1][0]) / 2, mapBounds[1][1]]);
-
-    return [[
-        Math.min(northWest[0], southWest[0]),
-        Math.min(southWest[1], southEast[1], southCenter[1])
-    ], [
-        Math.max(southEast[0], northEast[0]),
-        Math.max(northEast[1], northWest[1], northCenter[1])
-    ]];
+    return proj.transformExtent(mapBounds,'EPSG:4326','EPSG:27700', 4);
 }
 
 function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1) {

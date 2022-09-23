@@ -5,16 +5,20 @@ import center from "@turf/center";
 
 import DrawTile from "./draw_tile.js";
 
+const MAPBOXMINZOOM = 0;
+const MAPBOXMAXZOOM = 22;
 let updateTileInfoFunc;
 
 export default class CustomSource {
-    constructor(map, {wmtsUrl, tileSize = 256, division = 4}) {
+    constructor(map, {wmtsText, tileSize = 256, division = 4, maxCanvas = 2}) {
         this.type = 'custom';
 
-        this.serviceIdentification = this._getWMTSServiceConfig(wmtsUrl);
+        this.MapboxToTargetZoomList = [];
         this.tileSize = tileSize;
         this._map = map;
         this._division = division;
+        this.minzoom = MAPBOXMINZOOM;
+        this.maxzoom = MAPBOXMAXZOOM;
 
         this.targetTilesMap = window.targetTilesMap = new Map();
         this._merc = new SphericalMercator();
@@ -24,7 +28,9 @@ export default class CustomSource {
             division: this._division
         });
 
-        this._canvasList = new Array(2);
+        this._getWMTSServiceConfig(wmtsText);
+
+        this._canvasList = new Array(maxCanvas);
         for (let i = 0; i < this._canvasList.length; i++) {
             this._canvasList[i] = {
                 canvas: null,
@@ -32,43 +38,25 @@ export default class CustomSource {
             };
         }
         this._applyList = [];
-    }
 
-    async hasTile({z, x, y}) {
-        await this.serviceIdentification;
 
-        const mapboxTileBbox = this._merc.bbox(x, y, z);
-
-        return !(
-            (mapboxTileBbox[0] >= this.sourceBounds[2]) ||
-            (mapboxTileBbox[2] <= this.sourceBounds[0]) ||
-            (mapboxTileBbox[1] <= this.sourceBounds[1]) ||
-            (mapboxTileBbox[3] >= this.sourceBounds[3])
-        );
     }
 
     async loadTile({z, x, y}) {
-        await this.serviceIdentification;
-
         let targetTilesBounds;
         let mapboxTileBbox = this._merc.bbox(x, y, z);
-        mapboxTileBbox = [[mapboxTileBbox[0], mapboxTileBbox[1]], [mapboxTileBbox[2], mapboxTileBbox[3]]];
 
         const tileKey = this._getKey(x, y, z);
 
         if (this.targetTilesMap.has(tileKey)) {
             targetTilesBounds = this.targetTilesMap.get(tileKey).data;
+            this.targetTilesMap.get(tileKey).state = 'waiting';
         } else {
-            // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
-            targetTilesBounds = this._targetTiles(
-                mapboxTileBbox,
-                1 / this._map.transform.projection.pixelsPerMeter(
-                    0,
-                    this._map.transform.tileSize * Math.pow(2, this.tileSize === 512 ? z : z - 1)
-                ));
+            targetTilesBounds = this._targetTiles(mapboxTileBbox, z);
 
             this.targetTilesMap.set(tileKey, {
                 data: targetTilesBounds,
+                state: 'waiting',
                 mapboxX: x,
                 mapboxY: y,
                 mapboxZ: z
@@ -77,6 +65,11 @@ export default class CustomSource {
 
         const canvasObj = await this.applyCanvas();
 
+        if (this.targetTilesMap.get(tileKey).state === 'unload') {
+            this.returnCanvas(canvasObj);
+            return canvasObj.canvas;
+        }
+
         const gl = canvasObj.canvas.getContext("webgl", {willReadFrequently: true});
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -84,12 +77,14 @@ export default class CustomSource {
             await this._drawTile.draw(gl, targetTilesBounds, mapboxTileBbox);
         }
 
+        this.targetTilesMap.get(tileKey).state = 'loaded';
         this.returnCanvas(canvasObj);
         return canvasObj.canvas;
     }
 
     async unloadTile({z, x, y}) {
-        this.targetTilesMap.delete(this._getKey(x, y, z));
+        this.targetTilesMap.get(this._getKey(x, y, z)).state = 'unload';
+        // this.targetTilesMap.delete(this._getKey(x, y, z));
     }
 
     async applyCanvas() {
@@ -187,7 +182,9 @@ export default class CustomSource {
 
         const tileIDs = this._map.transform.coveringTiles({
             tileSize: this.tileSize,
-            roundZoom: true
+            roundZoom: true,
+            minzoom: this.minzoom,
+            maxzoom: this.maxzoom,
         });
 
         tileIDs.map(tileID => {
@@ -244,49 +241,43 @@ export default class CustomSource {
     /**
      * 计算在指定的 metersPerPixel 下，覆盖 bounds 的 wmts 服务的瓦片信息。
      * @param bounds
-     * @param metersPerPixel
+     * @param mapboxZoom
      * @returns
      * @private
      */
-    _targetTiles(bounds, metersPerPixel) {
+    _targetTiles(bounds, mapboxZoom) {
         const tileMatrices = this.serviceIdentification.Contents.TileMatrixSet[0].TileMatrix;
 
-        let targetZoomLevel = 0;
-
-        while (targetZoomLevel < tileMatrices.length) {
-            if (tileMatrices[targetZoomLevel].ScaleDenominator * 0.00028 <= metersPerPixel) {
-                break;
-            }
-            targetZoomLevel++;
-        }
+        let targetZoomLevel = this.MapboxToTargetZoomList[mapboxZoom];
 
         // 假设 TileWidth 等于 TileHeight
         const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner, TileWidth} = tileMatrices[targetZoomLevel];
 
-        const clipBounds = [[0, 0], [0, 0]];
+        const clipBounds = convertMapBounds(bounds);
 
-        clipBounds[0][0] = Math.max(bounds[0][0], this.sourceBounds[0]); // minLng
-        clipBounds[0][1] = Math.max(bounds[0][1], this.sourceBounds[1]); // minLat
+        clipBounds[0] = Math.max(clipBounds[0], this.sourceBounds[0]); // minLng
+        clipBounds[1] = Math.max(clipBounds[1], this.sourceBounds[1]); // minLat
 
-        clipBounds[1][0] = Math.min(bounds[1][0], this.sourceBounds[2]); // maxLng
-        clipBounds[1][1] = Math.min(bounds[1][1], this.sourceBounds[3]); // maxLat
+        clipBounds[2] = Math.min(clipBounds[2], this.sourceBounds[2]); // maxLng
+        clipBounds[3] = Math.min(clipBounds[3], this.sourceBounds[3]); // maxLat
 
-        if ((clipBounds[0][0] >= clipBounds[1][0]) || (clipBounds[0][1] >= clipBounds[1][1])) {
+        if ((clipBounds[0] >= clipBounds[2]) || (clipBounds[1] >= clipBounds[3])) {
             return [];
         }
-
-        const targetBounds = convertMapBounds(clipBounds);
 
         // ？？0.00028
         const tileLengthInMeters = ScaleDenominator * 0.00028 * TileWidth;
 
         const containedTiles = [];
 
-        const startI = Math.max(0, Math.floor((targetBounds[0][0] - TopLeftCorner[0]) / tileLengthInMeters));
-        const endI = Math.min(MatrixWidth - 1, Math.ceil((targetBounds[1][0] - TopLeftCorner[0]) / tileLengthInMeters));
+        const startI = Math.max(0, Math.floor((clipBounds[0] - TopLeftCorner[0]) / tileLengthInMeters));
+        const endI = Math.min(MatrixWidth - 1, Math.ceil((clipBounds[2] - TopLeftCorner[0]) / tileLengthInMeters));
 
-        const startJ = Math.max(0, Math.floor((TopLeftCorner[1] - targetBounds[1][1]) / tileLengthInMeters));
-        const endJ = Math.min(MatrixHeight - 1, Math.floor((TopLeftCorner[1] - targetBounds[0][1]) / tileLengthInMeters));
+        const startJ = Math.max(0, Math.floor((TopLeftCorner[1] - clipBounds[3]) / tileLengthInMeters));
+        const endJ = Math.min(MatrixHeight - 1, Math.floor((TopLeftCorner[1] - clipBounds[1]) / tileLengthInMeters));
+
+        clipBounds[0] -= tileLengthInMeters;
+        clipBounds[3] += tileLengthInMeters;
 
         for (let i = startI; i <= endI; i++) {
             for (let j = startJ; j <= endJ; j++) {
@@ -295,15 +286,7 @@ export default class CustomSource {
                     TopLeftCorner[1] - tileLengthInMeters * j
                 ];
 
-                const tileTopRight = [tileTopLeft[0] + tileLengthInMeters, tileTopLeft[1]];
-                const tileBottomLeft = [tileTopLeft[0], tileTopLeft[1] - tileLengthInMeters];
-                const tileBottomRight = [tileTopLeft[0] + tileLengthInMeters, tileTopLeft[1] - tileLengthInMeters];
-
-                if (this._bboxContains(targetBounds, tileTopLeft) ||
-                    this._bboxContains(targetBounds, tileTopRight) ||
-                    this._bboxContains(targetBounds, tileBottomLeft) ||
-                    this._bboxContains(targetBounds, tileBottomRight)
-                ) {
+                if (this._bboxContains(clipBounds, tileTopLeft)) {
                     containedTiles.push({
                         x: i,
                         y: j,
@@ -319,23 +302,71 @@ export default class CustomSource {
         return containedTiles;
     }
 
-    async _getWMTSServiceConfig(wmtsUrl) {
-        const res = await fetch(wmtsUrl);
-        const result = await res.text();
-
+    _getWMTSServiceConfig(wmtsText) {
         const parser = new WMTSCapabilities();
-        this.serviceIdentification = parser.read(result);
+        this.serviceIdentification = parser.read(wmtsText);
 
-        this.sourceBounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
+        // target wmts wgs84 bounds.
+        this.bounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
+        this.sourceBounds = convertMapBounds(this.bounds);
 
+        // target wmts url template.
         const {ResourceURL, Style, TileMatrixSetLink} = this.serviceIdentification.Contents.Layer[0];
         this._drawTile.tileUrl = ResourceURL[0].template
             .replace(/{Style}/g, Style[0].Identifier)
             .replace(/{TileMatrixSet}/g, TileMatrixSetLink[0].TileMatrixSet);
+
+        // minZoom, maxZoom
+        const {minZoom, maxZoom} = this._mapboxZoomToTargetZoom();
+        this.minzoom = minZoom;
+        this.maxzoom = maxZoom;
+    }
+
+    _mapboxZoomToTargetZoom() {
+        for (let mapboxZoom = MAPBOXMINZOOM; mapboxZoom <= MAPBOXMAXZOOM; mapboxZoom++) {
+            // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
+            const metersPerPixel = 1 / this._map.transform.projection.pixelsPerMeter(
+                0,
+                this._map.transform.tileSize * Math.pow(2, this.tileSize === 512 ? mapboxZoom : mapboxZoom - 1)
+            );
+
+            const tileMatrices = this.serviceIdentification.Contents.TileMatrixSet[0].TileMatrix;
+
+            let targetZoomLevel = this.MapboxToTargetZoomList.length > 0 ? this.MapboxToTargetZoomList[this.MapboxToTargetZoomList.length-1] : 0;
+
+            while (targetZoomLevel < tileMatrices.length) {
+                if (tileMatrices[targetZoomLevel].ScaleDenominator * 0.00028 <= metersPerPixel) {
+                    break;
+                }
+                targetZoomLevel++;
+            }
+
+            if (targetZoomLevel >= tileMatrices.length) targetZoomLevel = tileMatrices.length - 1;
+
+            this.MapboxToTargetZoomList.push(parseInt(tileMatrices[targetZoomLevel].Identifier));
+        }
+
+        let minZoom, maxZoom;
+
+        for (let i = MAPBOXMINZOOM; i < MAPBOXMAXZOOM; i++) {
+            if (this.MapboxToTargetZoomList[i] !== this.MapboxToTargetZoomList[i+1]) {
+                minZoom = i;
+                break;
+            }
+        }
+
+        for (let j = MAPBOXMAXZOOM; j > MAPBOXMINZOOM; j--) {
+            if (this.MapboxToTargetZoomList[j] !== this.MapboxToTargetZoomList[j-1]) {
+                maxZoom = j;
+                break;
+            }
+        }
+
+        return {minZoom, maxZoom};
     }
 
     _bboxContains(bbox, point) {
-        return (point[0] >= bbox[0][0] && point[0] < bbox[1][0]) && (point[1] >= bbox[0][1] && point[1] < bbox[1][1]);
+        return (point[0] >= bbox[0] && point[0] < bbox[2]) && (point[1] >= bbox[1] && point[1] < bbox[3]);
     }
 
     _getKey(x, y, z) {
