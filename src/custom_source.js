@@ -5,27 +5,29 @@ import center from "@turf/center";
 
 import DrawTile from "./draw_tile.js";
 
-const MAPBOXMINZOOM = 0;
-const MAPBOXMAXZOOM = 22;
+const MAPBOX_MIN_ZOOM = 0;
+const MAPBOX_MAX_ZOOM = 22;
 let updateTileInfoFunc;
 
 export default class CustomSource {
-    constructor(map, {wmtsText, tileSize = 256, division = 4, maxCanvas = 2}) {
+    constructor(map, {wmtsText, tileSize = 256, division = 4, maxCanvas = 2, converter}) {
         this.type = 'custom';
 
         this.MapboxToTargetZoomList = [];
+        this._converter = converter;
         this.tileSize = tileSize;
         this._map = map;
         this._division = division;
-        this.minzoom = MAPBOXMINZOOM;
-        this.maxzoom = MAPBOXMAXZOOM;
+        this.minzoom = MAPBOX_MIN_ZOOM;
+        this.maxzoom = MAPBOX_MAX_ZOOM;
 
         this.targetTilesMap = window.targetTilesMap = new Map();
         this._merc = new SphericalMercator();
         this._drawTile = new DrawTile({
             merc: this._merc,
             tileSize: this.tileSize,
-            division: this._division
+            division: this._division,
+            converter: this._converter
         });
 
         this._getWMTSServiceConfig(wmtsText);
@@ -193,7 +195,7 @@ export default class CustomSource {
                 const tiles = this.targetTilesMap.get(key);
                 tilePolygons.features.push(...tiles.data.map(tile => {
                     const {topLeft, tileLengthInMeters} = tile;
-                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, this._division);
+                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, this._division, this._converter.inverse);
                     feature.properties = {x: tile.x, y: tile.y, z: tile.z};
                     return feature;
                 }));
@@ -253,7 +255,7 @@ export default class CustomSource {
         // 假设 TileWidth 等于 TileHeight
         const {ScaleDenominator, MatrixWidth, MatrixHeight, TopLeftCorner, TileWidth} = tileMatrices[targetZoomLevel];
 
-        const clipBounds = convertMapBounds(bounds);
+        const clipBounds = convertMapBounds(bounds, this._division, this._converter.forward);
 
         clipBounds[0] = Math.max(clipBounds[0], this.sourceBounds[0]); // minLng
         clipBounds[1] = Math.max(clipBounds[1], this.sourceBounds[1]); // minLat
@@ -308,7 +310,7 @@ export default class CustomSource {
 
         // target wmts wgs84 bounds.
         this.bounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
-        this.sourceBounds = convertMapBounds(this.bounds);
+        this.sourceBounds = convertMapBounds(this.bounds, this._division, this._converter.forward);
 
         // target wmts url template.
         const {ResourceURL, Style, TileMatrixSetLink} = this.serviceIdentification.Contents.Layer[0];
@@ -323,7 +325,7 @@ export default class CustomSource {
     }
 
     _mapboxZoomToTargetZoom() {
-        for (let mapboxZoom = MAPBOXMINZOOM; mapboxZoom <= MAPBOXMAXZOOM; mapboxZoom++) {
+        for (let mapboxZoom = MAPBOX_MIN_ZOOM; mapboxZoom <= MAPBOX_MAX_ZOOM; mapboxZoom++) {
             // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
             const metersPerPixel = 1 / this._map.transform.projection.pixelsPerMeter(
                 0,
@@ -348,14 +350,14 @@ export default class CustomSource {
 
         let minZoom, maxZoom;
 
-        for (let i = MAPBOXMINZOOM; i < MAPBOXMAXZOOM; i++) {
+        for (let i = MAPBOX_MIN_ZOOM; i < MAPBOX_MAX_ZOOM; i++) {
             if (this.MapboxToTargetZoomList[i] !== this.MapboxToTargetZoomList[i+1]) {
                 minZoom = i;
                 break;
             }
         }
 
-        for (let j = MAPBOXMAXZOOM; j > MAPBOXMINZOOM; j--) {
+        for (let j = MAPBOX_MAX_ZOOM; j > MAPBOX_MIN_ZOOM; j--) {
             if (this.MapboxToTargetZoomList[j] !== this.MapboxToTargetZoomList[j-1]) {
                 maxZoom = j;
                 break;

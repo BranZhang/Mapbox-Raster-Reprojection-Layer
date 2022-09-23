@@ -1,60 +1,56 @@
-import proj4 from "proj4";
-import * as proj from "ol/proj";
-import {register} from 'ol/proj/proj4';
+function convertMapBounds(mapBounds, division = 1, forwardFunc) {
+    let coordinates = _boundsToPolygonCoordinates(mapBounds, division);
 
-proj4.defs([
-    [
-        'EPSG:4326',
-        '+title=WGS 84 (long/lat) +proj=longlat +ellps=WGS84 +datum=WGS84 +units=degrees'],
-    [
-        'EPSG:27700',
-        '+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 ' +
-        '+x_0=400000 +y_0=-100000 +ellps=airy ' +
-        '+towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 ' +
-        '+units=m +no_defs'
-    ]
-]);
+    coordinates = coordinates.map(forwardFunc);
 
-register(proj4);
-
-const converter = proj4('WGS84', 'EPSG:27700');
-
-function convertMapBounds(mapBounds) {
-    return proj.transformExtent(mapBounds,'EPSG:4326','EPSG:27700', 4);
+    return [
+        Math.min(...coordinates.map(c => c[0])),
+        Math.min(...coordinates.map(c => c[1])),
+        Math.max(...coordinates.map(c => c[0])),
+        Math.max(...coordinates.map(c => c[1])),
+    ];
 }
 
-function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1) {
-    const southWest = [topLeft[0], topLeft[1] - tileLength];
-    const southEast = [topLeft[0] + tileLength, topLeft[1] - tileLength];
-    const northEast = [topLeft[0] + tileLength, topLeft[1]];
-    const northWest = topLeft;
-
-    const coordinates = [converter.inverse(southWest)];
-
-    coordinates.push(...interpolateLine(southWest, southEast, {division, includeStart: false}));
-    coordinates.push(...interpolateLine(southEast, northEast, {division, includeStart: false}));
-    coordinates.push(...interpolateLine(northEast, northWest, {division, includeStart: false}));
-    coordinates.push(...interpolateLine(northWest, southWest, {division, includeStart: false}));
+function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1, inverseFunc) {
+    const coordinates = _boundsToPolygonCoordinates([
+        topLeft[0], topLeft[1] - tileLength, topLeft[0] + tileLength, topLeft[1]
+    ], division);
 
     return {
         'type': 'Feature',
         'geometry': {
             'type': 'Polygon',
             coordinates: [
-                coordinates
+                coordinates.map(inverseFunc)
             ]
         }
     };
 }
 
-function interpolateLine(start, end, {division, includeStart = true}) {
+function _boundsToPolygonCoordinates(bounds, division) {
+    const southWest = [bounds[0], bounds[1]];
+    const southEast = [bounds[2], bounds[1]];
+    const northEast = [bounds[2], bounds[3]];
+    const northWest = [bounds[0], bounds[3]];
+
+    const coordinates = [southWest];
+
+    coordinates.push(..._interpolateLine(southWest, southEast, division));
+    coordinates.push(..._interpolateLine(southEast, northEast, division));
+    coordinates.push(..._interpolateLine(northEast, northWest, division));
+    coordinates.push(..._interpolateLine(northWest, southWest, division));
+
+    return coordinates;
+}
+
+function _interpolateLine(start, end, division) {
     const result = [];
 
-    for (let i = (includeStart ? 0 : 1); i <= division; i++) {
-        result.push(converter.inverse([
+    for (let i = 1; i <= division; i++) {
+        result.push([
             start[0] + (end[0] - start[0]) * (i / division),
             start[1] + (end[1] - start[1]) * (i / division)
-        ]));
+        ]);
     }
 
     return result;
@@ -62,6 +58,5 @@ function interpolateLine(start, end, {division, includeStart = true}) {
 
 export {
     convertMapBounds,
-    interpolateLine,
     convertTargetBoundsToPolygon
 }

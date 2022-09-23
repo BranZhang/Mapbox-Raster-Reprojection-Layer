@@ -12,12 +12,13 @@ twgl.setDefaults({
 });
 
 export default class DrawTile {
-    constructor({tileSize, merc, division}) {
+    constructor({tileSize, merc, division, converter}) {
         this.tileSize = tileSize;
         this.colorfulF = false;
         this._merc = merc;
         this._division = division;
         this.tileUrl = "";
+        this._converter = converter;
     }
 
     draw(gl, tilesBounds, mapboxBounds) {
@@ -50,7 +51,7 @@ export default class DrawTile {
         }
 
         return new Promise((resolve, reject) => {
-            twgl.createTextures(gl, tileTextures, (err, textures, sources) => {
+            twgl.createTextures(gl, tileTextures, (err, textures) => {
                 // 遍历 tilesBounds，依次绘制
                 for (let i = 0; i < tilesBounds.length; i++) {
                     const tileBounds = tilesBounds[i];
@@ -104,7 +105,7 @@ export default class DrawTile {
                 const feature = convertTargetBoundsToPolygon([
                     topLeft[0] + singleLenghth * i,
                     topLeft[1] - singleLenghth * j,
-                ], singleLenghth, 1);
+                ], singleLenghth, 1, this._converter.inverse);
 
                 const coordinates = feature.geometry.coordinates[0].map(c => this._lngLatToTileRelativeCoordinate(mercBounds, c));
 
