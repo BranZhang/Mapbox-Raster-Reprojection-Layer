@@ -133,6 +133,10 @@ function createLayer(url, converter, otherOptions) {
                     'raster-opacity': 1
                 }
             });
+
+            map.fitBounds(customSource.bounds, {
+                padding: 20
+            });
         });
 }
 
