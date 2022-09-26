@@ -10,7 +10,7 @@ const MAPBOX_MAX_ZOOM = 22;
 let updateTileInfoFunc;
 
 export default class CustomSource {
-    constructor(map, {wmtsText, tileSize = 256, division = 4, maxCanvas = 2, converter}) {
+    constructor(map, {wmtsText, layer, matrixSet, style, tileSize = 256, division = 4, maxCanvas = 2, converter}) {
         this.type = 'custom';
 
         this.MapboxToTargetZoomList = [];
@@ -30,7 +30,7 @@ export default class CustomSource {
             converter: this._converter
         });
 
-        this._getWMTSServiceConfig(wmtsText);
+        this._getWMTSServiceConfig(wmtsText, {layer, matrixSet, style});
 
         this._canvasList = new Array(maxCanvas);
         for (let i = 0; i < this._canvasList.length; i++) {
@@ -248,7 +248,7 @@ export default class CustomSource {
      * @private
      */
     _targetTiles(bounds, mapboxZoom) {
-        const tileMatrices = this.serviceIdentification.Contents.TileMatrixSet[0].TileMatrix;
+        const tileMatrices = this.tileMatrixSet.TileMatrix;
 
         let targetZoomLevel = this.MapboxToTargetZoomList[mapboxZoom];
 
@@ -304,24 +304,56 @@ export default class CustomSource {
         return containedTiles;
     }
 
-    _getWMTSServiceConfig(wmtsText) {
+    _getWMTSServiceConfig(wmtsText, {layer, matrixSet, style}) {
         const parser = new WMTSCapabilities();
         this.serviceIdentification = parser.read(wmtsText);
 
+        let layerConfig;
+        if (layer === undefined) {
+            layerConfig = this.serviceIdentification.Contents.Layer[0];
+        } else {
+            layerConfig = this._findByIdentifier(this.serviceIdentification.Contents.Layer, layer);
+            if (!layerConfig) {
+                throw new Error(`no match layer: '${layer}'.`);
+            }
+        }
+        const {ResourceURL, Style, TileMatrixSetLink, WGS84BoundingBox} = layerConfig;
+
+        if (matrixSet === undefined) {
+            matrixSet = TileMatrixSetLink[0].TileMatrixSet;
+        }
+        const tileMatrixSet = this._findByIdentifier(this.serviceIdentification.Contents.TileMatrixSet, matrixSet);
+
+        if (!tileMatrixSet) {
+            throw new Error(`no match matrixSet: '${matrixSet}'.`);
+        }
+        this.tileMatrixSet = tileMatrixSet;
+
         // target wmts wgs84 bounds.
-        this.bounds = this.serviceIdentification.Contents.Layer[0].WGS84BoundingBox;
+        this.bounds = WGS84BoundingBox;
         this.sourceBounds = convertMapBounds(this.bounds, this._division, this._converter.forward);
 
         // target wmts url template.
-        const {ResourceURL, Style, TileMatrixSetLink} = this.serviceIdentification.Contents.Layer[0];
         this._drawTile.tileUrl = ResourceURL[0].template
-            .replace(/{Style}/g, Style[0].Identifier)
-            .replace(/{TileMatrixSet}/g, TileMatrixSetLink[0].TileMatrixSet);
+            .replace(/{Style}/g, style || Style[0].Identifier)
+            .replace(/{TileMatrixSet}/g, matrixSet);
 
         // minZoom, maxZoom
         const {minZoom, maxZoom} = this._mapboxZoomToTargetZoom();
         this.minzoom = minZoom;
         this.maxzoom = maxZoom;
+    }
+
+    _findByIdentifier(array, identifier) {
+        let res;
+        for (let i = 0; i < array.length; i++) {
+            if (array[i].Identifier === identifier) {
+                res = array[i];
+                break;
+            }
+        }
+
+        return res;
     }
 
     _mapboxZoomToTargetZoom() {
@@ -332,7 +364,7 @@ export default class CustomSource {
                 this._map.transform.tileSize * Math.pow(2, this.tileSize === 512 ? mapboxZoom : mapboxZoom - 1)
             );
 
-            const tileMatrices = this.serviceIdentification.Contents.TileMatrixSet[0].TileMatrix;
+            const tileMatrices = this.tileMatrixSet.TileMatrix;
 
             let targetZoomLevel = this.MapboxToTargetZoomList.length > 0 ? this.MapboxToTargetZoomList[this.MapboxToTargetZoomList.length-1] : 0;
 
