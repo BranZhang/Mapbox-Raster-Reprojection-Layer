@@ -52,7 +52,7 @@ export default class DrawTile {
 
         return new Promise((resolve, reject) => {
             twgl.createTextures(gl, tileTextures, (err, textures) => {
-                // 遍历 tilesBounds，依次绘制
+                // draw each tilesBounds
                 for (let i = 0; i < tilesBounds.length; i++) {
                     const tileBounds = tilesBounds[i];
 
@@ -92,6 +92,10 @@ export default class DrawTile {
                 resolve();
             });
         });
+    }
+
+    remove() {
+
     }
 
     _buildPositionAndUV(topLeft, tileLength, mercBounds) {

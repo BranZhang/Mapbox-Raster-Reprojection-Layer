@@ -3,7 +3,7 @@ import proj4 from "proj4";
 
 import * as dat from 'dat.gui';
 
-import CustomSource from "./custom_source.js";
+import ReprojectionSource from "./reprojection_source.js";
 
 proj4.defs([
     [
@@ -52,7 +52,7 @@ const map = new mapboxgl.Map({
 });
 
 map.showTileBoundaries = params.showTileBoundaries;
-let customSource;
+let reprojectionSource;
 
 map.on('load', () => {
     createDatGUI();
@@ -60,6 +60,8 @@ map.on('load', () => {
 });
 
 function loadOverlay(overlayName) {
+    if (reprojectionSource) reprojectionSource.remove();
+
     switch (overlayName) {
         case 'British National Grid':
             createLayer(
@@ -67,7 +69,7 @@ function loadOverlay(overlayName) {
                 proj4('WGS84', 'EPSG:27700'),
                 {
                     layer: 'OS_Open_Raster',
-                    tileSize: 512,
+                    tileSize: 256,
                     division: 4,
                 }
             )
@@ -115,7 +117,7 @@ function createLayer(url, converter, otherOptions) {
             return response.text();
         })
         .then(function (text) {
-            customSource = new CustomSource(map, {
+            reprojectionSource = new ReprojectionSource(map, {
                 wmtsText: text,
                 converter,
                 ...otherOptions
@@ -124,7 +126,7 @@ function createLayer(url, converter, otherOptions) {
             if (map.getLayer('custom-source-layer')) map.removeLayer('custom-source-layer');
             if (map.getSource('custom-source')) map.removeSource('custom-source');
 
-            map.addSource('custom-source', customSource);
+            map.addSource('custom-source', reprojectionSource);
             map.addLayer({
                 id: 'custom-source-layer',
                 type: 'raster',
@@ -134,7 +136,12 @@ function createLayer(url, converter, otherOptions) {
                 }
             });
 
-            map.fitBounds(customSource.bounds, {
+            if (params.tileInfo) {
+                reprojectionSource.showTileInfoLayer();
+            }
+            reprojectionSource.colorfulF = params.colorfulF;
+
+            map.fitBounds(reprojectionSource.bounds, {
                 padding: 20
             });
         });
@@ -160,13 +167,13 @@ function createDatGUI() {
     });
     gui.add(params, 'tileInfo').name('ArcGIS-TileBoundaries').onChange(() => {
         if (params.tileInfo) {
-            customSource.showTileInfoLayer();
+            reprojectionSource.showTileInfoLayer();
         } else {
-            customSource.removeTileInfoLayer();
+            reprojectionSource.removeTileInfoLayer();
         }
     });
     gui.add(params, 'colorfulF').onChange(() => {
-        customSource.colorfulF = params.colorfulF;
-        customSource.update();
+        reprojectionSource.colorfulF = params.colorfulF;
+        reprojectionSource.update();
     });
 }

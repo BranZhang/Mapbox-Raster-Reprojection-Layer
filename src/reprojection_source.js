@@ -9,8 +9,8 @@ const MAPBOX_MIN_ZOOM = 0;
 const MAPBOX_MAX_ZOOM = 22;
 let updateTileInfoFunc;
 
-export default class CustomSource {
-    constructor(map, {wmtsText, layer, matrixSet, style, tileSize = 256, division = 4, maxCanvas = 2, converter}) {
+export default class ReprojectionSource {
+    constructor(map, {wmtsText, layer, matrixSet, style, tileSize = 512, division = 4, maxCanvas = 2, converter}) {
         this.type = 'custom';
 
         this.MapboxToTargetZoomList = [];
@@ -236,12 +236,17 @@ export default class CustomSource {
         }
     }
 
+    remove() {
+        this._drawTile.remove();
+        this.removeTileInfoLayer();
+    }
+
     set colorfulF(val) {
         this._drawTile.colorfulF = !!val;
     }
 
     /**
-     * 计算在指定的 metersPerPixel 下，覆盖 bounds 的 wmts 服务的瓦片信息。
+     * figure out which tiles need to display to cover bounds in this mapboxZoom.
      * @param bounds
      * @param mapboxZoom
      * @returns
@@ -358,7 +363,7 @@ export default class CustomSource {
 
     _mapboxZoomToTargetZoom() {
         for (let mapboxZoom = MAPBOX_MIN_ZOOM; mapboxZoom <= MAPBOX_MAX_ZOOM; mapboxZoom++) {
-            // 如果 tileSize 等于 256， 则这里实际请求的 z 值比默认的地图瓦片的 z 值大 1
+            // if tileSize equal to 256, the scale value equal to pow(2, z - 1).
             const metersPerPixel = 1 / this._map.transform.projection.pixelsPerMeter(
                 0,
                 this._map.transform.tileSize * Math.pow(2, this.tileSize === 512 ? mapboxZoom : mapboxZoom - 1)
