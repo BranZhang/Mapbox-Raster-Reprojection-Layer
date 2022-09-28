@@ -25,16 +25,16 @@ const reprojectionSource = new ReprojectionSource(map, options);
 
 ### Options
 
-| name                | type         | Description                                         |
-|---------------------|--------------|-----------------------------------------------------|
-| wmtsText`Required`  | `Mapbox Map` | wmts config file in xml format.                     |
-| converter`Required` | `object`     | An object with `forward` and `inverse` function.    |
-| layer               | `object`     | Reprojection options, default first layer.          |
-| matrixSet           | `string`     | The matrix set identifier, default first matrixSet. |
-| style               | `string`     | The name of the style, default first style.         |
-| tileSize            | `number`     | Mapbox raster source tileSize, default 512.         |
-| division            | `number`     | Number of division per side of bounds, default 4.   |
-| maxCanvas           | `number`     | max canvas usage, default 2.                        |
+| name                | type      | Description                                         |
+|---------------------|-----------|-----------------------------------------------------|
+| wmtsText`Required`  | `string`  | wmts config file in xml format.                     |
+| converter`Required` | `object`  | An object with `forward` and `inverse` function.    |
+| layer               | `object`  | Reprojection options, default first layer.          |
+| matrixSet           | `string`  | The matrix set identifier, default first matrixSet. |
+| style               | `string`  | The name of the style, default first style.         |
+| tileSize            | `number`  | Mapbox raster source tileSize, default 512.         |
+| division            | `number`  | Number of division per side of bounds, default 4.   |
+| maxCanvas           | `number`  | max canvas usage, default 2.                        |
 
 ## Examples
 
