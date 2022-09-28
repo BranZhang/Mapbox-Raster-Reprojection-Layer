@@ -18,8 +18,8 @@ const reprojectionSource = new ReprojectionSource(map, options);
 
 ### ReprojectionSource
 
-| name    | type         | Description           |
-|---------|--------------|-----------------------|
+| name              | type         | Description           |
+|-------------------|--------------|-----------------------|
 | map`Required`     | `Mapbox Map` | A Mapbox Map object.  |
 | options`Required` | `Options`    | Reprojection options. |
 
