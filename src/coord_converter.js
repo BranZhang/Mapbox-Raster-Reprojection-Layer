@@ -11,10 +11,8 @@ function convertMapBounds(mapBounds, division = 1, forwardFunc) {
     ];
 }
 
-function convertTargetBoundsToPolygon(topLeft, tileLength, division = 1, inverseFunc) {
-    const coordinates = _boundsToPolygonCoordinates([
-        topLeft[0], topLeft[1] - tileLength, topLeft[0] + tileLength, topLeft[1]
-    ], division);
+function convertTargetBoundsToPolygon(bounds, division = 1, inverseFunc) {
+    const coordinates = _boundsToPolygonCoordinates(bounds, division);
 
     return {
         'type': 'Feature',

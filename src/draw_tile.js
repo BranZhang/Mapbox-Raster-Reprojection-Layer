@@ -12,13 +12,14 @@ twgl.setDefaults({
 });
 
 export default class DrawTile {
-    constructor({tileSize, merc, division, converter}) {
+    constructor({tileSize, merc, tileUrl, division, converter, sourceBounds}) {
         this.tileSize = tileSize;
         this.colorfulF = false;
         this._merc = merc;
         this._division = division;
-        this.tileUrl = "";
+        this.tileUrl = tileUrl;
         this._converter = converter;
+        this._sourceBounds = sourceBounds;
     }
 
     draw(gl, tilesBounds, mapboxBounds) {
@@ -99,7 +100,17 @@ export default class DrawTile {
     }
 
     _buildPositionAndUV(topLeft, tileLength, mercBounds) {
-        const singleLenghth = tileLength / this._division;
+        const realTopLeft = [
+            Math.max(topLeft[0], this._sourceBounds[0]),
+            Math.min(topLeft[1], this._sourceBounds[3])
+        ];
+        const realBottomRight = [
+            Math.min(topLeft[0] + tileLength, this._sourceBounds[2]),
+            Math.max(topLeft[1] - tileLength, this._sourceBounds[1])
+        ];
+
+        const uRange = [(realTopLeft[0] - topLeft[0]) / tileLength, (realBottomRight[0] - topLeft[0]) / tileLength];
+        const vRange = [1- (realTopLeft[1] - (topLeft[1] - tileLength)) / tileLength, 1 - (realBottomRight[1] - (topLeft[1] - tileLength)) / tileLength];
 
         const position = [];
         const uv = [];
@@ -107,9 +118,15 @@ export default class DrawTile {
         for (let i = 0; i < this._division; i++) {
             for (let j = 0; j < this._division; j++) {
                 const feature = convertTargetBoundsToPolygon([
-                    topLeft[0] + singleLenghth * i,
-                    topLeft[1] - singleLenghth * j,
-                ], singleLenghth, 1, this._converter.inverse);
+                    // topLeft[0] + singleLength * i,
+                    // topLeft[1] - singleLength * j - singleLength,
+                    // topLeft[0] + singleLength * i + singleLength,
+                    // topLeft[1] - singleLength * j,
+                    this._numbersDivide(realTopLeft[0], realBottomRight[0], i),
+                    this._numbersDivide(realTopLeft[1], realBottomRight[1], j+1),
+                    this._numbersDivide(realTopLeft[0], realBottomRight[0], i+1),
+                    this._numbersDivide(realTopLeft[1], realBottomRight[1], j),
+                ], 1, this._converter.inverse);
 
                 const coordinates = feature.geometry.coordinates[0].map(c => this._lngLatToTileRelativeCoordinate(mercBounds, c));
 
@@ -122,12 +139,18 @@ export default class DrawTile {
                     ...coordinates[1]
                 ]);
                 uv.push(...[
-                    i / this._division, j / this._division,
-                    (i + 1) / this._division, j / this._division,
-                    i / this._division, (j + 1) / this._division,
-                    (i + 1) / this._division, j / this._division,
-                    i / this._division, (j + 1) / this._division,
-                    (i + 1) / this._division, (j + 1) / this._division
+                    // i / this._division, j / this._division,
+                    // (i + 1) / this._division, j / this._division,
+                    // i / this._division, (j + 1) / this._division,
+                    // (i + 1) / this._division, j / this._division,
+                    // i / this._division, (j + 1) / this._division,
+                    // (i + 1) / this._division, (j + 1) / this._division
+                    this._numbersDivide(uRange[0], uRange[1], i), this._numbersDivide(vRange[0], vRange[1], j),
+                    this._numbersDivide(uRange[0], uRange[1], i+1), this._numbersDivide(vRange[0], vRange[1], j),
+                    this._numbersDivide(uRange[0], uRange[1], i), this._numbersDivide(vRange[0], vRange[1], j+1),
+                    this._numbersDivide(uRange[0], uRange[1], i+1), this._numbersDivide(vRange[0], vRange[1], j),
+                    this._numbersDivide(uRange[0], uRange[1], i), this._numbersDivide(vRange[0], vRange[1], j+1),
+                    this._numbersDivide(uRange[0], uRange[1], i+1), this._numbersDivide(vRange[0], vRange[1], j+1),
                 ])
             }
         }
@@ -148,5 +171,9 @@ export default class DrawTile {
         const y = this.tileSize - (mercPos[1] - bounds[0][1]) / (bounds[1][1] - bounds[0][1]) * this.tileSize;
 
         return [x, y];
+    }
+
+    _numbersDivide(start, end, step) {
+        return start + (end - start) / this._division * step;
     }
 }

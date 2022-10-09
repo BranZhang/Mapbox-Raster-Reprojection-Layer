@@ -23,14 +23,17 @@ export default class ReprojectionSource {
 
         this.targetTilesMap = window.targetTilesMap = new Map();
         this._merc = new SphericalMercator();
+
+        this._getWMTSServiceConfig(wmtsText, {layer, matrixSet, style});
+
         this._drawTile = new DrawTile({
             merc: this._merc,
             tileSize: this.tileSize,
             division: this._division,
-            converter: this._converter
+            converter: this._converter,
+            sourceBounds: this.sourceBounds,
+            tileUrl: this._tileUrl
         });
-
-        this._getWMTSServiceConfig(wmtsText, {layer, matrixSet, style});
 
         this._canvasList = new Array(maxCanvas);
         for (let i = 0; i < this._canvasList.length; i++) {
@@ -195,7 +198,9 @@ export default class ReprojectionSource {
                 const tiles = this.targetTilesMap.get(key);
                 tilePolygons.features.push(...tiles.data.map(tile => {
                     const {topLeft, tileLengthInMeters} = tile;
-                    const feature = convertTargetBoundsToPolygon(topLeft, tileLengthInMeters, this._division, this._converter.inverse);
+                    const feature = convertTargetBoundsToPolygon([
+                        topLeft[0], topLeft[1] - tileLengthInMeters, topLeft[0] + tileLengthInMeters, topLeft[1]
+                    ], this._division, this._converter.inverse);
                     feature.properties = {x: tile.x, y: tile.y, z: tile.z};
                     return feature;
                 }));
@@ -339,7 +344,7 @@ export default class ReprojectionSource {
         this.sourceBounds = convertMapBounds(this.bounds, this._division, this._converter.forward);
 
         // target wmts url template.
-        this._drawTile.tileUrl = ResourceURL[0].template
+        this._tileUrl = ResourceURL[0].template
             .replace(/{Style}/g, style || Style[0].Identifier)
             .replace(/{TileMatrixSet}/g, matrixSet);
 
