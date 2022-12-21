@@ -11,6 +11,7 @@ module.exports = {
     devtool: 'inline-source-map',
     devServer: {
         static: './dist',
+        allowedHosts: "all"
     },
     // optimization: {
     //     runtimeChunk: 'single',
